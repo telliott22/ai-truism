@@ -11,8 +11,8 @@ const categories = [
   { icon: "🤖", title: "AI Ecosystem", desc: "MCP skills, safety research, agent tools" },
 ];
 
-export default function Home() {
-  const stats = getGlobalStats();
+export default async function Home() {
+  const stats = await getGlobalStats();
 
   return (
     <div className="relative">
