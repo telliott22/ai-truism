@@ -1,30 +1,85 @@
 /**
- * Data store — Supabase-backed with in-memory fallback.
- * Uses Supabase when env vars are set, otherwise falls back to mock data.
+ * Data store — Supabase REST API with in-memory fallback.
+ * Uses raw fetch (not JS client) because Supabase JS client has issues on Vercel.
  */
 import { Agent, Task, Contribution, VolunteerSession, TaskFeedback } from "./types";
 import { mockAgents, mockTasks, mockContributions } from "@/data/mock";
 import crypto from "crypto";
 
-function getSupabase() {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  const { createClient } = require("@supabase/supabase-js");
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false }
+// ============================================================
+// Supabase REST helpers
+// ============================================================
+function cfg() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return { url, key };
+}
+
+function headers(c: { key: string }) {
+  return {
+    'apikey': c.key,
+    'Authorization': `Bearer ${c.key}`,
+    'Content-Type': 'application/json',
+    'Prefer': 'return=representation',
+  };
+}
+
+async function query<T = any>(table: string, params: string = ""): Promise<T[] | null> {
+  const c = cfg();
+  if (!c) return null;
+  const res = await fetch(`${c.url}/rest/v1/${table}?${params}`, {
+    headers: headers(c), cache: 'no-store',
   });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function queryOne<T = any>(table: string, params: string): Promise<T | null> {
+  const c = cfg();
+  if (!c) return null;
+  const res = await fetch(`${c.url}/rest/v1/${table}?${params}&limit=1`, {
+    headers: { ...headers(c), 'Accept': 'application/vnd.pgrst.object+json' },
+    cache: 'no-store',
+  });
+  if (!res.ok || res.status === 406) return null;
+  return res.json();
+}
+
+async function insert<T = any>(table: string, body: any): Promise<T> {
+  const c = cfg();
+  if (!c) throw new Error("Supabase not configured");
+  const res = await fetch(`${c.url}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { ...headers(c), 'Accept': 'application/vnd.pgrst.object+json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.details || `Insert failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function update<T = any>(table: string, params: string, body: any): Promise<T | null> {
+  const c = cfg();
+  if (!c) return null;
+  const res = await fetch(`${c.url}/rest/v1/${table}?${params}`, {
+    method: 'PATCH',
+    headers: { ...headers(c), 'Accept': 'application/vnd.pgrst.object+json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok || res.status === 406) return null;
+  return res.json();
 }
 
 // ============================================================
-// In-memory fallback (used when Supabase is not configured)
+// In-memory fallback
 // ============================================================
 interface Store {
-  agents: Agent[];
-  tasks: Task[];
-  contributions: Contribution[];
-  sessions: VolunteerSession[];
-  feedback: TaskFeedback[];
-  apiKeys: Map<string, string>;
-  initialized: boolean;
+  agents: Agent[]; tasks: Task[]; contributions: Contribution[];
+  sessions: VolunteerSession[]; feedback: TaskFeedback[];
+  apiKeys: Map<string, string>; initialized: boolean;
 }
 
 const globalStore = globalThis as unknown as { __aitruist_store?: Store };
@@ -33,17 +88,12 @@ function getStore(): Store {
   if (!globalStore.__aitruist_store) {
     const apiKeys = new Map<string, string>();
     mockAgents.forEach((a) => {
-      const key = `ait_${a.id.slice(0, 8)}`;
-      apiKeys.set(key, a.id);
+      apiKeys.set(`ait_${a.id.slice(0, 8)}`, a.id);
     });
     globalStore.__aitruist_store = {
-      agents: [...mockAgents],
-      tasks: [...mockTasks],
-      contributions: [...mockContributions],
-      sessions: [],
-      feedback: [],
-      apiKeys,
-      initialized: true,
+      agents: [...mockAgents], tasks: [...mockTasks],
+      contributions: [...mockContributions], sessions: [], feedback: [],
+      apiKeys, initialized: true,
     };
   }
   return globalStore.__aitruist_store;
@@ -53,36 +103,34 @@ function hash(val: string) {
   return crypto.createHash("sha256").update(val).digest("hex");
 }
 
+function useDb() { return !!cfg(); }
+
 // ============================================================
 // Agents
 // ============================================================
 export async function getAgentByApiKey(key: string): Promise<Agent | undefined> {
-  const db = getSupabase();
-  if (db) {
+  if (useDb()) {
     const keyHash = hash(key);
-    const { data } = await db.from("agents").select("*").eq("api_key_hash", keyHash).single();
-    return data || undefined;
+    const agent = await queryOne<Agent>("agents", `api_key_hash=eq.${keyHash}`);
+    return agent || undefined;
   }
   const store = getStore();
   const agentId = store.apiKeys.get(key);
-  if (!agentId) return undefined;
-  return store.agents.find((a) => a.id === agentId);
+  return agentId ? store.agents.find((a) => a.id === agentId) : undefined;
 }
 
 export async function getAgentByName(name: string): Promise<Agent | undefined> {
-  const db = getSupabase();
-  if (db) {
-    const { data } = await db.from("agents").select("*").ilike("name", name).single();
-    return data || undefined;
+  if (useDb()) {
+    const agent = await queryOne<Agent>("agents", `name=ilike.${encodeURIComponent(name)}`);
+    return agent || undefined;
   }
   return getStore().agents.find((a) => a.name.toLowerCase() === name.toLowerCase());
 }
 
 export async function getAgentById(id: string): Promise<Agent | undefined> {
-  const db = getSupabase();
-  if (db) {
-    const { data } = await db.from("agents").select("*").eq("id", id).single();
-    return data || undefined;
+  if (useDb()) {
+    const agent = await queryOne<Agent>("agents", `id=eq.${id}`);
+    return agent || undefined;
   }
   return getStore().agents.find((a) => a.id === id);
 }
@@ -92,26 +140,18 @@ export async function registerAgent(name: string, description: string): Promise<
   const keyHash = hash(apiKey);
   const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`;
 
-  const db = getSupabase();
-  if (db) {
-    const { data, error } = await db.from("agents").insert({
-      name,
-      description,
-      avatar_url: avatarUrl,
-      api_key_hash: keyHash,
-    }).select().single();
-    if (error) throw error;
-    return { agent: data, apiKey };
+  if (useDb()) {
+    const agent = await insert<Agent>("agents", {
+      name, description, avatar_url: avatarUrl, api_key_hash: keyHash,
+    });
+    return { agent, apiKey };
   }
 
   const store = getStore();
   const id = crypto.randomUUID();
   const agent: Agent = {
-    id, name, description,
-    avatar_url: avatarUrl,
-    api_key_hash: keyHash,
-    seeds: 0, contributions_count: 0,
-    created_at: new Date().toISOString(),
+    id, name, description, avatar_url: avatarUrl, api_key_hash: keyHash,
+    seeds: 0, contributions_count: 0, created_at: new Date().toISOString(),
   };
   store.agents.push(agent);
   store.apiKeys.set(apiKey, id);
@@ -124,17 +164,14 @@ export async function registerAgent(name: string, description: string): Promise<
 export async function getTasks(filters?: {
   category?: string; difficulty?: string; status?: string; language?: string;
 }): Promise<Task[]> {
-  const db = getSupabase();
-  if (db) {
-    let query = db.from("tasks").select("*").order("created_at", { ascending: false });
-    if (filters?.category) query = query.eq("category", filters.category);
-    if (filters?.difficulty) query = query.eq("difficulty", filters.difficulty);
-    if (filters?.status) query = query.eq("status", filters.status);
-    if (filters?.language) query = query.ilike("language", filters.language);
-    const { data } = await query;
-    return data || [];
+  if (useDb()) {
+    let params = "order=created_at.desc";
+    if (filters?.category) params += `&category=eq.${encodeURIComponent(filters.category)}`;
+    if (filters?.difficulty) params += `&difficulty=eq.${encodeURIComponent(filters.difficulty)}`;
+    if (filters?.status) params += `&status=eq.${encodeURIComponent(filters.status)}`;
+    if (filters?.language) params += `&language=ilike.${encodeURIComponent(filters.language)}`;
+    return (await query<Task>("tasks", params)) || [];
   }
-
   let result = getStore().tasks;
   if (filters?.category) result = result.filter((t) => t.category === filters.category);
   if (filters?.difficulty) result = result.filter((t) => t.difficulty === filters.difficulty);
@@ -144,25 +181,18 @@ export async function getTasks(filters?: {
 }
 
 export async function getTaskById(id: string): Promise<Task | undefined> {
-  const db = getSupabase();
-  if (db) {
-    const { data } = await db.from("tasks").select("*").eq("id", id).single();
-    return data || undefined;
+  if (useDb()) {
+    return (await queryOne<Task>("tasks", `id=eq.${id}`)) || undefined;
   }
   return getStore().tasks.find((t) => t.id === id);
 }
 
 export async function claimTask(taskId: string, agentId: string): Promise<Task | null> {
-  const db = getSupabase();
-  if (db) {
-    const { data, error } = await db.from("tasks")
-      .update({ status: "claimed", claimed_by: agentId })
-      .eq("id", taskId).eq("status", "open")
-      .select().single();
-    if (error || !data) return null;
-    return data;
+  if (useDb()) {
+    return await update<Task>("tasks", `id=eq.${taskId}&status=eq.open`, {
+      status: "claimed", claimed_by: agentId,
+    });
   }
-
   const task = getStore().tasks.find((t) => t.id === taskId);
   if (!task || task.status !== "open") return null;
   task.status = "claimed";
@@ -171,22 +201,16 @@ export async function claimTask(taskId: string, agentId: string): Promise<Task |
 }
 
 export async function submitTask(taskId: string, agentId: string, proofUrl?: string, proofText?: string): Promise<Contribution | null> {
-  const db = getSupabase();
-  if (db) {
-    // Verify task is claimed by this agent
-    const { data: task } = await db.from("tasks").select("*").eq("id", taskId).eq("claimed_by", agentId).single();
+  if (useDb()) {
+    const task = await queryOne<Task>("tasks", `id=eq.${taskId}&claimed_by=eq.${agentId}`);
     if (!task) return null;
-    
-    await db.from("tasks").update({ status: "submitted" }).eq("id", taskId);
-    
-    const { data: contribution } = await db.from("contributions").insert({
+    await update("tasks", `id=eq.${taskId}`, { status: "submitted" });
+    return await insert<Contribution>("contributions", {
       agent_id: agentId, task_id: taskId,
       proof_url: proofUrl, proof_text: proofText,
       seeds_earned: task.seeds_reward,
-    }).select().single();
-    return contribution;
+    });
   }
-
   const store = getStore();
   const task = store.tasks.find((t) => t.id === taskId);
   if (!task || task.claimed_by !== agentId) return null;
@@ -205,22 +229,17 @@ export async function submitTask(taskId: string, agentId: string, proofUrl?: str
 // Volunteer Sessions
 // ============================================================
 export async function startSession(taskId: string, agentId: string): Promise<VolunteerSession | null> {
-  const db = getSupabase();
-  if (db) {
-    const { data: task } = await db.from("tasks").select("*").eq("id", taskId).eq("claimed_by", agentId).single();
+  if (useDb()) {
+    const task = await queryOne<Task>("tasks", `id=eq.${taskId}&claimed_by=eq.${agentId}`);
     if (!task) return null;
-    
-    // Check for existing active session
-    const { data: existing } = await db.from("volunteer_sessions")
-      .select("*").eq("agent_id", agentId).eq("task_id", taskId).eq("status", "active").single();
+    const existing = await queryOne<VolunteerSession>(
+      "volunteer_sessions", `agent_id=eq.${agentId}&task_id=eq.${taskId}&status=eq.active`
+    );
     if (existing) return existing;
-    
-    const { data } = await db.from("volunteer_sessions").insert({
+    return await insert<VolunteerSession>("volunteer_sessions", {
       agent_id: agentId, task_id: taskId,
-    }).select().single();
-    return data;
+    });
   }
-
   const store = getStore();
   const task = store.tasks.find((t) => t.id === taskId);
   if (!task || task.claimed_by !== agentId) return null;
@@ -238,26 +257,22 @@ export async function endSession(
   sessionId: string, agentId: string,
   data: { proof_url?: string; proof_text?: string; estimated_tokens_used?: number }
 ): Promise<{ session: VolunteerSession; contribution: Contribution } | null> {
-  const db = getSupabase();
-  if (db) {
-    const { data: session } = await db.from("volunteer_sessions")
-      .update({ ended_at: new Date().toISOString(), estimated_tokens_used: data.estimated_tokens_used, status: "completed" })
-      .eq("id", sessionId).eq("agent_id", agentId).eq("status", "active")
-      .select().single();
+  if (useDb()) {
+    const session = await update<VolunteerSession>(
+      "volunteer_sessions",
+      `id=eq.${sessionId}&agent_id=eq.${agentId}&status=eq.active`,
+      { ended_at: new Date().toISOString(), estimated_tokens_used: data.estimated_tokens_used, status: "completed" }
+    );
     if (!session) return null;
-    
-    const { data: task } = await db.from("tasks").select("*").eq("id", session.task_id).single();
-    await db.from("tasks").update({ status: "submitted" }).eq("id", session.task_id);
-    
-    const { data: contribution } = await db.from("contributions").insert({
+    const task = await queryOne<Task>("tasks", `id=eq.${session.task_id}`);
+    await update("tasks", `id=eq.${session.task_id}`, { status: "submitted" });
+    const contribution = await insert<Contribution>("contributions", {
       agent_id: agentId, task_id: session.task_id,
       proof_url: data.proof_url, proof_text: data.proof_text,
       seeds_earned: task?.seeds_reward ?? 0,
-    }).select().single();
-    
-    return { session, contribution: contribution! };
+    });
+    return { session, contribution };
   }
-
   const store = getStore();
   const session = store.sessions.find((s) => s.id === sessionId && s.agent_id === agentId && s.status === "active");
   if (!session) return null;
@@ -283,19 +298,16 @@ export async function addTaskFeedback(
   taskId: string, agentId: string,
   data: { rating: "suitable" | "difficult" | "unsuitable"; comment?: string; difficulty_vs_expected?: "easier" | "as_expected" | "harder"; would_recommend?: boolean }
 ): Promise<TaskFeedback | null> {
-  const db = getSupabase();
-  if (db) {
-    const { data: task } = await db.from("tasks").select("id").eq("id", taskId).single();
+  if (useDb()) {
+    const task = await queryOne<Task>("tasks", `id=eq.${taskId}`);
     if (!task) return null;
-    const { data: fb } = await db.from("task_feedback").insert({
+    return await insert<TaskFeedback>("task_feedback", {
       task_id: taskId, agent_id: agentId,
       rating: data.rating, comment: data.comment,
       difficulty_vs_expected: data.difficulty_vs_expected,
       would_recommend: data.would_recommend ?? true,
-    }).select().single();
-    return fb;
+    });
   }
-
   const store = getStore();
   if (!store.tasks.find((t) => t.id === taskId)) return null;
   const fb: TaskFeedback = {
@@ -310,16 +322,14 @@ export async function addTaskFeedback(
 }
 
 export async function getTaskFeedback(taskId: string) {
-  const db = getSupabase();
-  if (db) {
-    const { data: task } = await db.from("tasks").select("id").eq("id", taskId).single();
+  if (useDb()) {
+    const task = await queryOne<Task>("tasks", `id=eq.${taskId}`);
     if (!task) return null;
-    const { data: feedback } = await db.from("task_feedback").select("*").eq("task_id", taskId);
-    const items = feedback || [];
+    const items = (await query<TaskFeedback>("task_feedback", `task_id=eq.${taskId}`)) || [];
     const total = items.length;
-    const suitable = items.filter((f: TaskFeedback) => f.rating === "suitable").length;
-    const difficult = items.filter((f: TaskFeedback) => f.rating === "difficult").length;
-    const unsuitable = items.filter((f: TaskFeedback) => f.rating === "unsuitable").length;
+    const suitable = items.filter((f) => f.rating === "suitable").length;
+    const difficult = items.filter((f) => f.rating === "difficult").length;
+    const unsuitable = items.filter((f) => f.rating === "unsuitable").length;
     return {
       task_id: taskId, total_reviews: total,
       ratings: { suitable, difficult, unsuitable },
@@ -328,7 +338,6 @@ export async function getTaskFeedback(taskId: string) {
       feedback: items,
     };
   }
-
   const store = getStore();
   if (!store.tasks.find((t) => t.id === taskId)) return null;
   const items = store.feedback.filter((f) => f.task_id === taskId);
@@ -349,10 +358,8 @@ export async function getTaskFeedback(taskId: string) {
 // Leaderboard
 // ============================================================
 export async function getLeaderboard(): Promise<Agent[]> {
-  const db = getSupabase();
-  if (db) {
-    const { data } = await db.from("agents").select("*").order("seeds", { ascending: false });
-    return data || [];
+  if (useDb()) {
+    return (await query<Agent>("agents", "order=seeds.desc")) || [];
   }
   return [...getStore().agents].sort((a, b) => b.seeds - a.seeds);
 }
@@ -361,10 +368,8 @@ export async function getLeaderboard(): Promise<Agent[]> {
 // Contributions
 // ============================================================
 export async function getContributionsByAgent(agentId: string): Promise<Contribution[]> {
-  const db = getSupabase();
-  if (db) {
-    const { data } = await db.from("contributions").select("*").eq("agent_id", agentId).order("created_at", { ascending: false });
-    return data || [];
+  if (useDb()) {
+    return (await query<Contribution>("contributions", `agent_id=eq.${agentId}&order=created_at.desc`)) || [];
   }
   return getStore().contributions.filter((c) => c.agent_id === agentId);
 }
@@ -375,28 +380,23 @@ export async function getContributionsByAgent(agentId: string): Promise<Contribu
 const MILESTONES = [1_000, 10_000, 100_000, 1_000_000];
 
 export async function getGlobalStats() {
-  const db = getSupabase();
-  if (db) {
-    const { data: completedTasks } = await db.from("tasks").select("vus").in("status", ["completed", "verified"]);
-    const totalVUs = (completedTasks || []).reduce((sum: number, t: { vus: number }) => sum + (t.vus || 1), 0);
-    
-    const { count: totalAgents } = await db.from("agents").select("*", { count: "exact", head: true });
-    const { data: prContribs } = await db.from("contributions").select("proof_url").ilike("proof_url", "%github.com%");
-    const { data: sciTasks } = await db.from("tasks").select("id").eq("category", "citizen-science").in("status", ["completed", "verified"]);
-    const { data: allAgents } = await db.from("agents").select("seeds");
-    const totalSeeds = (allAgents || []).reduce((sum: number, a: { seeds: number }) => sum + a.seeds, 0);
-    
+  if (useDb()) {
+    const completedTasks = (await query<Task>("tasks", "status=in.(completed,verified)&select=vus")) || [];
+    const totalVUs = completedTasks.reduce((sum, t) => sum + (t.vus || 1), 0);
+    const allAgents = (await query<Agent>("agents", "select=seeds")) || [];
+    const totalAgents = allAgents.length;
+    const totalSeeds = allAgents.reduce((sum, a) => sum + a.seeds, 0);
+    const prContribs = (await query<Contribution>("contributions", "proof_url=ilike.*github.com*&select=id")) || [];
+    const sciTasks = (await query<Task>("tasks", "category=eq.citizen-science&status=in.(completed,verified)&select=id")) || [];
+
     const currentTarget = MILESTONES.find((m) => m > totalVUs) ?? MILESTONES[MILESTONES.length - 1];
     const currentIdx = MILESTONES.indexOf(currentTarget);
     const nextTarget = currentIdx < MILESTONES.length - 1 ? MILESTONES[currentIdx + 1] : currentTarget * 10;
 
     return {
-      totalUnitsCompleted: totalVUs,
-      currentTarget, nextTarget,
-      totalAgents: totalAgents || 0,
-      totalPRsMerged: (prContribs || []).length,
-      totalScienceTasks: (sciTasks || []).length,
-      totalSeeds,
+      totalUnitsCompleted: totalVUs, currentTarget, nextTarget,
+      totalAgents, totalPRsMerged: prContribs.length,
+      totalScienceTasks: sciTasks.length, totalSeeds,
       totalTokensVolunteered: formatTokens(totalSeeds * 1000),
     };
   }
@@ -409,8 +409,7 @@ export async function getGlobalStats() {
   const nextTarget = currentIdx < MILESTONES.length - 1 ? MILESTONES[currentIdx + 1] : currentTarget * 10;
 
   return {
-    totalUnitsCompleted: totalVUs,
-    currentTarget, nextTarget,
+    totalUnitsCompleted: totalVUs, currentTarget, nextTarget,
     totalAgents: store.agents.length,
     totalPRsMerged: store.contributions.filter((c) => c.proof_url?.includes("github.com")).length,
     totalScienceTasks: store.tasks.filter((t) => t.category === "citizen-science" && (t.status === "completed" || t.status === "verified")).length,
