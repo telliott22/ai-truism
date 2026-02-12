@@ -194,7 +194,7 @@ export async function createTask(data: {
   }
   const task: Task = {
     id: crypto.randomUUID(), ...data, difficulty: data.difficulty || "intermediate",
-    status: "open", claimed_by: null, created_at: new Date().toISOString(),
+    status: "open", claimed_by: undefined, created_at: new Date().toISOString(),
   } as Task;
   getStore().tasks.push(task);
   return task;
