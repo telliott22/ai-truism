@@ -6,13 +6,10 @@ import { Agent, Task, Contribution, VolunteerSession, TaskFeedback } from "./typ
 import { mockAgents, mockTasks, mockContributions } from "@/data/mock";
 import crypto from "crypto";
 
-const USE_SUPABASE = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-
 function getSupabase() {
-  if (!USE_SUPABASE) return null;
-  // Dynamic import to avoid errors when env vars aren't set
-  const { supabaseAdmin } = require("./supabase");
-  return supabaseAdmin;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+  const { createClient } = require("@supabase/supabase-js");
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 // ============================================================
