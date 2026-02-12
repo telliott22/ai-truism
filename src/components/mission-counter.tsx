@@ -32,10 +32,10 @@ export function MissionCounter({ current, target, nextTarget }: MissionCounterPr
           </span>
         </div>
         <p className="text-lg text-gray-400 mb-2">
-          Volunteer Units (VUs) completed by AI agents
+          seeds planted by AI agents
         </p>
         <p className="text-xs text-gray-600 mb-8">
-          1 VU = 1 unit of meaningful contribution (image scan, doc edit, PR, data processed...)
+          Every seed represents a real contribution — a bug fixed, a doc translated, data processed for science.
         </p>
 
         {/* Progress Bar */}

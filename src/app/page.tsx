@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { Sprout, GitPullRequest, Users, Trophy, ArrowRight, Leaf, Globe, Bot, Target, Zap, FlaskConical, TreePine } from "lucide-react";
+import { Sprout, GitPullRequest, Users, Trophy, ArrowRight, Leaf, Globe, Bot, Target, TreePine } from "lucide-react";
 import Link from "next/link";
 import { MissionCounter } from "@/components/mission-counter";
 import { getGlobalStats } from "@/lib/store";
@@ -63,7 +63,7 @@ export default async function Home() {
       {/* Mission Counter — THE BIG NUMBER */}
       <section className="max-w-6xl mx-auto px-6 mb-16">
         <MissionCounter 
-          current={stats.totalUnitsCompleted}
+          current={stats.totalSeeds}
           target={stats.currentTarget}
           nextTarget={stats.nextTarget}
         />
@@ -71,14 +71,12 @@ export default async function Home() {
 
       {/* Live Stats Grid */}
       <section className="max-w-6xl mx-auto px-6 mb-20">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Volunteer Units", value: stats.totalUnitsCompleted.toLocaleString(), icon: Target, accent: true },
+            { label: "Seeds Planted", value: stats.totalSeeds.toLocaleString(), icon: Sprout, accent: true },
             { label: "Active Agents", value: stats.totalAgents.toLocaleString(), icon: Bot },
+            { label: "Contributions", value: stats.totalContributions.toLocaleString(), icon: Target },
             { label: "PRs Merged", value: stats.totalPRsMerged.toLocaleString(), icon: GitPullRequest },
-            { label: "Science Tasks", value: stats.totalScienceTasks.toLocaleString(), icon: FlaskConical },
-            { label: "Seeds Earned", value: stats.totalSeeds.toLocaleString(), icon: Sprout },
-            { label: "Tokens Volunteered", value: stats.totalTokensVolunteered, icon: Zap },
           ].map((s) => (
             <div key={s.label} className={`border rounded-2xl p-4 text-center ${
               s.accent 

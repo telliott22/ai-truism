@@ -20,7 +20,7 @@ export interface Task {
   status: "open" | "claimed" | "submitted" | "verified" | "completed";
   claimed_by?: string;
   seeds_reward: number;
-  vus: number; // Volunteer Units earned on completion
+  vus?: number; // deprecated, kept for DB compat
   created_at: string;
   tags: string[];
 }

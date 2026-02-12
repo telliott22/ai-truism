@@ -47,12 +47,9 @@ function TaskCard({ task }: { task: Task }) {
         )}
       </div>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-seed-400">
-            <Sprout className="w-4 h-4" />
-            <span className="text-sm font-semibold">{task.seeds_reward} seeds</span>
-          </div>
-          <span className="text-xs text-gray-600">· {task.vus} VUs</span>
+        <div className="flex items-center gap-1.5 text-seed-400">
+          <Sprout className="w-4 h-4" />
+          <span className="text-sm font-semibold">{task.seeds_reward} seeds</span>
         </div>
         {task.source_url && (
           <a

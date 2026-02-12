@@ -381,46 +381,35 @@ const MILESTONES = [1_000, 10_000, 100_000, 1_000_000];
 
 export async function getGlobalStats() {
   if (useDb()) {
-    const completedTasks = (await query<Task>("tasks", "status=in.(completed,verified)&select=vus")) || [];
-    const totalVUs = completedTasks.reduce((sum, t) => sum + (t.vus || 1), 0);
     const allAgents = (await query<Agent>("agents", "select=seeds")) || [];
     const totalAgents = allAgents.length;
     const totalSeeds = allAgents.reduce((sum, a) => sum + a.seeds, 0);
+    const totalContribs = (await query<Contribution>("contributions", "select=id")) || [];
     const prContribs = (await query<Contribution>("contributions", "proof_url=ilike.*github.com*&select=id")) || [];
-    const sciTasks = (await query<Task>("tasks", "category=eq.citizen-science&status=in.(completed,verified)&select=id")) || [];
 
-    const currentTarget = MILESTONES.find((m) => m > totalVUs) ?? MILESTONES[MILESTONES.length - 1];
+    const currentTarget = MILESTONES.find((m) => m > totalSeeds) ?? MILESTONES[MILESTONES.length - 1];
     const currentIdx = MILESTONES.indexOf(currentTarget);
     const nextTarget = currentIdx < MILESTONES.length - 1 ? MILESTONES[currentIdx + 1] : currentTarget * 10;
 
     return {
-      totalUnitsCompleted: totalVUs, currentTarget, nextTarget,
-      totalAgents, totalPRsMerged: prContribs.length,
-      totalScienceTasks: sciTasks.length, totalSeeds,
-      totalTokensVolunteered: formatTokens(totalSeeds * 1000),
+      totalSeeds, currentTarget, nextTarget,
+      totalAgents, totalContributions: totalContribs.length,
+      totalPRsMerged: prContribs.length,
     };
   }
 
   const store = getStore();
-  const completedTasks = store.tasks.filter((t) => t.status === "completed" || t.status === "verified");
-  const totalVUs = completedTasks.reduce((sum, t) => sum + (t.vus || 1), 0);
-  const currentTarget = MILESTONES.find((m) => m > totalVUs) ?? MILESTONES[MILESTONES.length - 1];
+  const totalSeeds = store.agents.reduce((sum, a) => sum + a.seeds, 0);
+  const currentTarget = MILESTONES.find((m) => m > totalSeeds) ?? MILESTONES[MILESTONES.length - 1];
   const currentIdx = MILESTONES.indexOf(currentTarget);
   const nextTarget = currentIdx < MILESTONES.length - 1 ? MILESTONES[currentIdx + 1] : currentTarget * 10;
 
   return {
-    totalUnitsCompleted: totalVUs, currentTarget, nextTarget,
+    totalSeeds, currentTarget, nextTarget,
     totalAgents: store.agents.length,
+    totalContributions: store.contributions.length,
     totalPRsMerged: store.contributions.filter((c) => c.proof_url?.includes("github.com")).length,
-    totalScienceTasks: store.tasks.filter((t) => t.category === "citizen-science" && (t.status === "completed" || t.status === "verified")).length,
-    totalSeeds: store.agents.reduce((sum, a) => sum + a.seeds, 0),
-    totalTokensVolunteered: formatTokens(store.agents.reduce((sum, a) => sum + a.seeds, 0) * 1000),
   };
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toString();
-}
+// end of store

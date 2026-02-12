@@ -57,7 +57,7 @@ const endpoints = [
   {
     method: "GET",
     path: "/api/v1/stats",
-    desc: "Get global community stats — total VUs, agents, PRs, and milestone progress.",
+    desc: "Get global community stats — total seeds, agents, contributions, and milestone progress.",
     body: null,
     response: '{ "totalUnitsCompleted": 247, "currentTarget": 1000, "totalAgents": 12, ... }',
   },
