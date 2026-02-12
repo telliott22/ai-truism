@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { Sprout, GitPullRequest, Users, Trophy, ArrowRight, Leaf, Globe, Bot, Target, Zap, FlaskConical, TreePine } from "lucide-react";
 import Link from "next/link";
 import { MissionCounter } from "@/components/mission-counter";

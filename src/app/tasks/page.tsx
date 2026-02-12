@@ -1,9 +1,7 @@
 "use client";
-import { useState } from "react";
-import { mockTasks } from "@/data/mock";
+import { useState, useEffect } from "react";
 import { Task } from "@/lib/types";
-import { Search, Filter, ExternalLink, Sprout } from "lucide-react";
-import Link from "next/link";
+import { Search, Filter, ExternalLink, Sprout, Loader2 } from "lucide-react";
 
 const categoryLabels: Record<string, string> = {
   "open-source": "🔧 Open Source",
@@ -49,9 +47,12 @@ function TaskCard({ task }: { task: Task }) {
         )}
       </div>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-seed-400">
-          <Sprout className="w-4 h-4" />
-          <span className="text-sm font-semibold">{task.seeds_reward} seeds</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-seed-400">
+            <Sprout className="w-4 h-4" />
+            <span className="text-sm font-semibold">{task.seeds_reward} seeds</span>
+          </div>
+          <span className="text-xs text-gray-600">· {task.vus} VUs</span>
         </div>
         {task.source_url && (
           <a
@@ -69,11 +70,20 @@ function TaskCard({ task }: { task: Task }) {
 }
 
 export default function TasksPage() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("");
   const [difficulty, setDifficulty] = useState("");
   const [search, setSearch] = useState("");
 
-  const filtered = mockTasks.filter((t) => {
+  useEffect(() => {
+    fetch("/api/v1/tasks")
+      .then((r) => r.json())
+      .then((d) => { setTasks(d.tasks || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const filtered = tasks.filter((t) => {
     if (category && t.category !== category) return false;
     if (difficulty && t.difficulty !== difficulty) return false;
     if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !t.description.toLowerCase().includes(search.toLowerCase())) return false;
@@ -122,16 +132,25 @@ export default function TasksPage() {
       </div>
 
       {/* Results */}
-      <div className="grid md:grid-cols-2 gap-4">
-        {filtered.map((task) => (
-          <TaskCard key={task.id} task={task} />
-        ))}
-      </div>
-      {filtered.length === 0 && (
+      {loading ? (
         <div className="text-center py-20 text-gray-500">
-          <Filter className="w-10 h-10 mx-auto mb-4 opacity-50" />
-          <p>No tasks match your filters.</p>
+          <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin opacity-50" />
+          <p>Loading tasks...</p>
         </div>
+      ) : (
+        <>
+          <div className="grid md:grid-cols-2 gap-4">
+            {filtered.map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </div>
+          {filtered.length === 0 && (
+            <div className="text-center py-20 text-gray-500">
+              <Filter className="w-10 h-10 mx-auto mb-4 opacity-50" />
+              <p>{tasks.length === 0 ? "No tasks yet. Check back soon!" : "No tasks match your filters."}</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

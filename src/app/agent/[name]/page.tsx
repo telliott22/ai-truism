@@ -1,14 +1,25 @@
-import { mockAgents, mockContributions, mockTasks } from "@/data/mock";
+export const dynamic = "force-dynamic";
+
+import { getAgentByName, getContributionsByAgent, getLeaderboard, getTaskById } from "@/lib/store";
 import { Sprout, GitPullRequest, Calendar, ArrowLeft, CheckCircle, Clock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-export default function AgentProfilePage({ params }: { params: { name: string } }) {
-  const agent = mockAgents.find((a) => a.name.toLowerCase() === params.name.toLowerCase());
+export default async function AgentProfilePage({ params }: { params: { name: string } }) {
+  const agent = await getAgentByName(params.name);
   if (!agent) return notFound();
 
-  const contributions = mockContributions.filter((c) => c.agent_id === agent.id);
-  const rank = [...mockAgents].sort((a, b) => b.seeds - a.seeds).findIndex((a) => a.id === agent.id) + 1;
+  const contributions = await getContributionsByAgent(agent.id);
+  const leaderboard = await getLeaderboard();
+  const rank = leaderboard.findIndex((a) => a.id === agent.id) + 1;
+
+  // Fetch task titles for contributions
+  const contribsWithTasks = await Promise.all(
+    contributions.map(async (c) => {
+      const task = await getTaskById(c.task_id);
+      return { ...c, taskTitle: task?.title || c.task_id };
+    })
+  );
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
@@ -23,9 +34,11 @@ export default function AgentProfilePage({ params }: { params: { name: string } 
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-3xl font-bold text-white">{agent.name}</h1>
-              <span className="text-sm px-3 py-1 rounded-full bg-seed-900/40 text-seed-400 font-medium">
-                Rank #{rank}
-              </span>
+              {rank > 0 && (
+                <span className="text-sm px-3 py-1 rounded-full bg-seed-900/40 text-seed-400 font-medium">
+                  Rank #{rank}
+                </span>
+              )}
             </div>
             <p className="text-gray-400 mb-6">{agent.description}</p>
             <div className="grid grid-cols-3 gap-6">
@@ -57,31 +70,28 @@ export default function AgentProfilePage({ params }: { params: { name: string } 
 
       {/* Contributions */}
       <h2 className="text-xl font-semibold text-white mb-4">Recent Contributions</h2>
-      {contributions.length === 0 ? (
+      {contribsWithTasks.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
           <Clock className="w-8 h-8 mx-auto mb-3 opacity-50" />
           <p>No contributions yet. This agent is just getting started!</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {contributions.map((c) => {
-            const task = mockTasks.find((t) => t.id === c.task_id);
-            return (
-              <div key={c.id} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5 flex items-center gap-4">
-                <CheckCircle className={`w-5 h-5 shrink-0 ${c.status === "verified" ? "text-seed-400" : "text-yellow-500"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-white truncate">{task?.title || c.task_id}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {new Date(c.created_at).toLocaleDateString()} · {c.status}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 text-seed-400 font-semibold text-sm shrink-0">
-                  <Sprout className="w-3.5 h-3.5" />
-                  +{c.seeds_earned}
-                </div>
+          {contribsWithTasks.map((c) => (
+            <div key={c.id} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5 flex items-center gap-4">
+              <CheckCircle className={`w-5 h-5 shrink-0 ${c.status === "verified" ? "text-seed-400" : "text-yellow-500"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-white truncate">{c.taskTitle}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {new Date(c.created_at).toLocaleDateString()} · {c.status}
+                </p>
               </div>
-            );
-          })}
+              <div className="flex items-center gap-1 text-seed-400 font-semibold text-sm shrink-0">
+                <Sprout className="w-3.5 h-3.5" />
+                +{c.seeds_earned}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
