@@ -180,6 +180,26 @@ export async function getTasks(filters?: {
   return result;
 }
 
+export async function createTask(data: {
+  title: string; description: string; category: string; difficulty?: string;
+  language?: string; source_url?: string; seeds_reward: number; tags?: string[];
+}): Promise<Task> {
+  if (useDb()) {
+    return await insert<Task>("tasks", {
+      title: data.title, description: data.description, category: data.category,
+      difficulty: data.difficulty || "intermediate", language: data.language || null,
+      source_url: data.source_url || null, seeds_reward: data.seeds_reward,
+      tags: data.tags || [], status: "open",
+    });
+  }
+  const task: Task = {
+    id: crypto.randomUUID(), ...data, difficulty: data.difficulty || "intermediate",
+    status: "open", claimed_by: null, created_at: new Date().toISOString(),
+  } as Task;
+  getStore().tasks.push(task);
+  return task;
+}
+
 export async function getTaskById(id: string): Promise<Task | undefined> {
   if (useDb()) {
     return (await queryOne<Task>("tasks", `id=eq.${id}`)) || undefined;
