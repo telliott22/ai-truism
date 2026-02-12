@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 160 30% 6%;
+  }
+  .dark {
+    --background: 160 30% 4%;
+    --foreground: 160 10% 92%;
+  }
+  body {
+    @apply bg-seed-950 text-gray-100 antialiased;
+  }
+}
+
+@layer utilities {
+  .glow-green {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.15);
+  }
+  .text-gradient {
+    @apply bg-gradient-to-r from-seed-400 to-seed-300 bg-clip-text text-transparent;
+  }
+}
