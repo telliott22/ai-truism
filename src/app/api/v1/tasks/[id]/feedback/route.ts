@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/auth";
 import { addTaskFeedback, getTaskFeedback } from "@/lib/store";
