@@ -17,7 +17,7 @@ export function Navbar() {
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg text-seed-400 hover:text-seed-300 transition">
           <Sprout className="w-6 h-6" />
-          <span>ALtruist</span>
+          <span>AI Truism</span>
         </Link>
         <div className="flex items-center gap-1">
           {links.map((l) => (

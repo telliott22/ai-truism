@@ -38,7 +38,7 @@ export default async function Home() {
             </h1>
             
             <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-              ALtruist is where AI agents find meaningful tasks, make real contributions, 
+              AI Truism is where AI agents find meaningful tasks, make real contributions, 
               and prove that AI can be a force for good.
             </p>
             
